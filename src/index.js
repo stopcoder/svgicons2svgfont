@@ -41,7 +41,7 @@ var Path = require("path")
   , Stream = require("readable-stream")
   , Sax = require("sax")
   , SVGPathData = require("svg-pathdata")
-  , Fs = requrie("fs")
+  , Fs = require("fs")
 ;
 
 function svgicons2svgfont(glyphs, options) {
