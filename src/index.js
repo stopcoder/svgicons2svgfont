@@ -41,6 +41,7 @@ var Path = require("path")
   , Stream = require("readable-stream")
   , Sax = require("sax")
   , SVGPathData = require("svg-pathdata")
+  , Fs = requrie("fs")
 ;
 
 function svgicons2svgfont(glyphs, options) {
@@ -54,12 +55,15 @@ function svgicons2svgfont(glyphs, options) {
     , error = options.error || console.error.bind(console);
   glyphs = glyphs.forEach(function (glyph, index, glyphs) {
     // Parsing each icons asynchronously
-    var saxStream = Sax.createStream(true)
-      , parents = []
-    ;
+    var saxStream = Sax.createStream(true),
+        parents = [],
+        simpleMode = false;
+
     saxStream.on('closetag', function(tag) {
       parents.pop();
     });
+
+    // start of onopentag
     saxStream.on('opentag', function(tag) {
       parents.push(tag);
       // Checking if any parent rendering is disabled and exit if so
@@ -101,6 +105,9 @@ function svgicons2svgfont(glyphs, options) {
         }
         if('height' in tag.attributes) {
           glyph.height = parseFloat(tag.attributes.height, 10);
+        }
+        if('unicode' in tag.attributes) {
+          glyph.unicode = tag.attributes.unicode;
         }
         if(!glyph.width || !glyph.height) {
           log('Glyph "' + glyph.name + '" has no size attribute on which to'
@@ -173,10 +180,18 @@ function svgicons2svgfont(glyphs, options) {
           + ' ' + (cx - rx) + ',' + cy
           + 'Z', parents
         ));
-      } else if('path' === tag.name && tag.attributes.d) {
-        glyph.d.push(applyTransforms(tag.attributes.d, parents));
+      } else if('path' === tag.name) {
+        if ('d' in tag.attributes) {
+          glyph.d.push(applyTransforms(tag.attributes.d, parents));
+        }
+        if ('id' in tag.attributes) {
+          glyph.name = tag.attributes.id
+        }
       }
     });
+    // end of onopentag
+
+    // start of onend
     saxStream.on('end', function() {
       glyph.running = false;
       if(glyphs.every(function(glyph) {
@@ -251,11 +266,14 @@ function svgicons2svgfont(glyphs, options) {
               .round(options.round)
               .encode();
           }
+          if (!glyph.unicode) {
+            glyph.unicode = "&#x" + glyph.codepoint.toString(16).toUpperCase() + ";";
+          }
           delete glyph.d;
           delete glyph.running;
           outputStream.write('\
     <glyph glyph-name="' + glyph.name + '"\n\
-      unicode="&#x' + (glyph.codepoint.toString(16)).toUpperCase() + ';"\n\
+      unicode="' + glyph.unicode + '"\n\
       horiz-adv-x="' + glyph.width + '" d="' + d +'" />\n');
         });
         outputStream.write('\
@@ -269,22 +287,35 @@ function svgicons2svgfont(glyphs, options) {
         outputStream.end();
       }
     });
-    if('string' !== typeof glyph.name) {
-      throw Error('Please provide a name for the glyph at index ' + index);
+    // end of onend
+
+    // main body
+    if ('string' === typeof glyph) {
+      simpleMode = true;
+    } else {
+      if('string' !== typeof glyph.name) {
+        throw Error('Please provide a name for the glyph at index ' + index);
+      }
+      if(glyphs.some(function(g) {
+        return (g !== glyph && g.name === glyph.name);
+      })) {
+        throw Error('The glyph name "' + glyph.name + '" must be unique.');
+      }
+      if('number' !== typeof glyph.codepoint) {
+        throw Error('Please provide a codepoint for the glyph "' + glyph.name + '"');
+      }
+      if(glyphs.some(function(g) {
+        return (g !== glyph && g.codepoint === glyph.codepoint);
+      })) {
+        throw Error('The glyph "' + glyph.name
+          + '" codepoint seems to be used already elsewhere.');
+      }
     }
-    if(glyphs.some(function(g) {
-      return (g !== glyph && g.name === glyph.name);
-    })) {
-      throw Error('The glyph name "' + glyph.name + '" must be unique.');
-    }
-    if('number' !== typeof glyph.codepoint) {
-      throw Error('Please provide a codepoint for the glyph "' + glyph.name + '"');
-    }
-    if(glyphs.some(function(g) {
-      return (g !== glyph && g.codepoint === glyph.codepoint);
-    })) {
-      throw Error('The glyph "' + glyph.name
-        + '" codepoint seems to be used already elsewhere.');
+
+    if (simpleMode) {
+      var config = {};
+      config.stream = Fs.createReadStream(glyph);
+      glyph = config;
     }
     glyph.running = true;
     glyph.d = [];
