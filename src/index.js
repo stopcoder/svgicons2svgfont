@@ -268,6 +268,8 @@ function svgicons2svgfont(glyphs, options) {
           }
           if (!glyph.unicode) {
             glyph.unicode = "&#x" + glyph.codepoint.toString(16).toUpperCase() + ";";
+          } else {
+            glyph.unicode = "&#x" + glyph.unicode.toUpperCase() + ";";
           }
           delete glyph.d;
           delete glyph.running;
@@ -316,6 +318,7 @@ function svgicons2svgfont(glyphs, options) {
       var config = {};
       config.stream = Fs.createReadStream(glyph);
       glyph = config;
+      glyphs[index] = glyph;
     }
     glyph.running = true;
     glyph.d = [];
